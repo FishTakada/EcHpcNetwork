@@ -3,7 +3,7 @@ import sys
 import numpy as np
 from matplotlib import pyplot
 import pickle
-from ec_hpc_net import EcHpc
+from ec_hpc_net import EcHpcSimple
 from matplotlib import mathtext
 from cusnn import analysis as sa
 
@@ -230,7 +230,7 @@ def main(root_dir: str, session_id: int, params: dict):
 
         # load network data
         with open(train_dir + "/snn_trial%d.pickle" % (params["n_train_trial"]-1), "rb") as f:
-            snn: EcHpc = pickle.load(f)
+            snn: EcHpcSimple = pickle.load(f)
 
         # calc PC rate map
         sr_free = sa.SpikeReader(np.load(train_dir + "/spike_total.npy"))

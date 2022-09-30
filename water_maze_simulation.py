@@ -1,11 +1,11 @@
+import os
 import sys
-from tasks import replay_by_noise, water_maze_task
+import pickle
+import subprocess
+from tasks import replay_by_noise, water_maze_task, place_field_evaluation, trajectory_modulation
 from analysis import place_cell_analysis_2d, replay_stats_2d
 from replay_analysis import TrajectoryEvent
-import subprocess
 from plot_figs import paper_plot_2d, figure_7a
-import pickle
-import os
 
 
 def main(root_dir: str):
@@ -20,7 +20,9 @@ def main(root_dir: str):
               "n_session": 150,
               "n_train_trial": 36,
               "n_replay_trial": 10,
-              "da_list": [0.0, 0.5],
+              "n_trajectory_session": 100,
+              "n_trajectory_trial": 10,
+              "da_list": [0.0, 0.5, 1.0],
               "block_size": 256,
               "dt": 0.2,  # time step for numerical solution[ms]
               "max_spike_in_step": 2048,
@@ -64,6 +66,15 @@ def main(root_dir: str):
             for f_ach in [2.5]:
                 replay_by_noise(root_dir + "water_maze_task/", session, da, f_ach, params)
 
+    for da in params["da_list"]:
+        for session in range(params["n_session"]):
+            place_field_evaluation(root_dir, da=da, session=session, net_num=0)
+            place_field_evaluation(root_dir, da=da, session=session, net_num=params["n_train_trial"]-1)
+
+    for da in [0.0, 0.5]:
+        for session in range(params["n_session"]):
+            trajectory_modulation(root_dir, session, da, params)
+
     # ----------- analysis ----------- #
     n_process = 20
 
@@ -84,7 +95,7 @@ def main(root_dir: str):
     place_cell_analysis_2d(root_dir, params)
     replay_stats_2d(root_dir, params)
 
-    # ----------- plotting ----------- #
+    # # ----------- plotting ----------- #
     paper_plot_2d(root_dir, params)     # figure 7 and 8
     figure_7a(root_dir + "water_maze_task/da0.50/session15", root_dir, params)    # figure 7a
 

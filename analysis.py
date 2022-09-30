@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import pickle
-from ec_hpc_net import EcHpc
+from ec_hpc_net import EcHpcSimple
 from cusnn import analysis as sa
 import pandas as pd
 from scipy import stats
@@ -75,7 +75,7 @@ def place_cell_analysis_1d(root_dir: str, params: dict):
     out_dir = root_dir + "/analysis/"
 
     with open(root_dir + 'linear_track_task/da%.2f/session%d' % (da_list[0], 0) + "/snn_trial%d.pickle" % (n_trial - 1), "rb") as f:
-        snn: EcHpc = pickle.load(f)
+        snn: EcHpcSimple = pickle.load(f)
 
     # parameters
     n_da = len(da_list)
@@ -225,12 +225,12 @@ def place_cell_analysis_1d(root_dir: str, params: dict):
 
 
 def place_cell_analysis_2d(root_dir: str, params: dict):
-    
+
     out_dir = root_dir + "analysis_2d/"
     os.makedirs(out_dir, exist_ok=True)
-    with open(root_dir + 'water_maze_task/da%.2f/session%d' % (params["da_list"][0], 0) + "/snn_trial%d.pickle" % 
+    with open(root_dir + 'water_maze_task/da%.2f/session%d' % (params["da_list"][0], 0) + "/snn_trial%d.pickle" %
               (params["n_train_trial"] - 1), "rb") as f:
-        snn: EcHpc = pickle.load(f)
+        snn: EcHpcSimple = pickle.load(f)
 
     # parameters
     n_da = len(params["da_list"])
@@ -240,15 +240,13 @@ def place_cell_analysis_2d(root_dir: str, params: dict):
     field_thresh = 0.1  # [Hz]
 
     # axis
-    theta_axis = np.linspace(-np.pi, np.pi, params["n_part"])
+    theta_axis = np.linspace(0, 2 * np.pi, params["n_part"])
     mov_axis = np.linspace(0, params["mov_lim"], params["n_part"])
 
     # output data array
-    mean_corr = np.zeros((n_da, session_div, session_div, params["n_session"]))
-    theta_v_dist = np.zeros((n_da, session_div, session_div, theta_axis.size, mov_axis.size))
+    theta_v_dist = np.zeros((n_da, session_div, session_div, theta_axis.size - 1, mov_axis.size))
     field_area = np.zeros((n_da, session_div, params["n_session"]))
     field_peak = np.zeros((n_da, session_div, params["n_session"]))
-    ac_mean_rate = np.zeros((n_da, session_div, params["n_session"]))
     pyr_mean_rate = np.zeros((n_da, session_div, params["n_session"]))
 
     # analysis loop
@@ -259,81 +257,50 @@ def place_cell_analysis_2d(root_dir: str, params: dict):
             print("da: %.2f, session: %d" % (da, session))
             # load data
             train_dir = root_dir + 'water_maze_task/da%.2f/session%d' % (da, session)
-            spike_tot = np.load(train_dir + '/spike_total.npy')  # [timing, cell id]
-            place_tot = np.load(train_dir + "/place_total.npy")  # [t, x(t), y(t)]
 
-            # make rate map for early and late trials
-            t_sum = np.cumsum(np.load(train_dir + "/trial_end_time.npy")) * 0.001  # ms to sec
-            t_sum = np.insert(t_sum, 0, -0.001)
+            spike_0 = np.load(train_dir + '/spike_trial0.npy')  # [timing, cell id]
+            place_0 = np.load(train_dir + '/place_trial0.npy')  # [t, x(t), y(t)]
+            spike_35 = np.load(train_dir + '/spike_trial35.npy')  # [timing, cell id]
+            place_35 = np.load(train_dir + '/place_trial35.npy')  # [t, x(t), y(t)]
 
-            # remove initial act
-            start_act = 2.0  # [sec]
-            for j in range(params["n_train_trial"]):
-                t_s, t_as = t_sum[j] + 0.001, t_sum[j] + start_act + 0.001
-                place_tot = np.concatenate((place_tot[:np.searchsorted(place_tot[:, 0], t_s)], place_tot[np.searchsorted(place_tot[:, 0], t_as):]))
-                spike_tot = np.concatenate((spike_tot[:np.searchsorted(spike_tot[:, 0], t_s)], spike_tot[np.searchsorted(spike_tot[:, 0], t_as):]))
+            tr = sa.TrajectoryReader(place_0, env_size=[0, 0, 1.5, 1.5])
+            sr = sa.SpikeReader(spike_0)
+            trajectory = tr.make_trajectory()
+            pyr = sr.make_group(snn.pyramidal.gid)
+            rate_map_0 = sa.calc_ratemap2d_div(pyr, trajectory, time_window=[params["act_start"] * 0.001, trajectory.t[-1]], no_nan=True)
 
-            # data array
-            rate_maps, pyr_spk, ac_spk = [], [], []
-            n_fields = []
+            tr = sa.TrajectoryReader(place_35, env_size=[0, 0, 1.5, 1.5])
+            sr = sa.SpikeReader(spike_35)
+            trajectory = tr.make_trajectory()
+            pyr = sr.make_group(snn.pyramidal.gid)
+            rate_map_35 = sa.calc_ratemap2d_div(pyr, trajectory, time_window=[params["act_start"] * 0.001, trajectory.t[-1]], no_nan=True)
 
-            # make rate maps
-            for j in range(session_div):
-                t_s, t_e = t_sum[int(params["n_train_trial"] * j / session_div)] + 0.001, t_sum[int(params["n_train_trial"] * (j + 1) / session_div)]
-                tr = sa.TrajectoryReader(place_tot[np.searchsorted(place_tot[:, 0], t_s):np.searchsorted(place_tot[:, 0], t_e)],
-                                         env_size=[0, 0, 1.5, 1.5])
-                sr = sa.SpikeReader(spike_tot[np.searchsorted(spike_tot[:, 0], t_s):np.searchsorted(spike_tot[:, 0], t_e)])
-                trajectory = tr.make_trajectory()
-                pyr = sr.make_group(snn.pyramidal.gid)
-                ac = sr.make_group(snn.action_neuron.gid)
-                pyr_spk.append(pyr)
-                ac_spk.append(ac)
-                rate_maps.append(sa.calc_ratemap2d(pyr, trajectory, time_window=[0, 100000]))
-                ac_mean_rate[i, j, session] = ac.spike_timing.size / ac.n_cells / (t_e - t_s)
-                pyr_mean_rate[i, j, session] = pyr.spike_timing.size / pyr.n_cells / (t_e - t_s)
-
-            for r_map in rate_maps:
-                # nan -> 0 for this analysis
-                r_map.rate[np.isnan(r_map.rate)] = 0
-
-            # single map analysis
-            for j in range(session_div):
-                n_fields.append(sa.calc_place_field_number(rate_maps[j], thresh_rate=field_thresh))
-                area = sa.calc_place_field_area(rate_maps[j], thresh_rate=field_thresh)
-                field_area[i, j, session] = np.mean(area[np.nonzero(area)])
-                peaks = np.max(np.max(rate_maps[j].rate, axis=1), axis=1)
-                field_peak[i, j, session] = np.mean(peaks[np.nonzero(peaks)])
+            n_fields_0 = sa.calc_place_field_number(rate_map_0, thresh_rate=field_thresh)
+            n_fields_35 = sa.calc_place_field_number(rate_map_35, thresh_rate=field_thresh)
 
             # pair wise analysis
-            for j in range(session_div):
-                for k in range(j, session_div):
-                    # load
-                    a_map = rate_maps[j]
-                    b_map = rate_maps[k]
-                    a_max = np.max(np.max(a_map.rate, axis=1), axis=1) > params["pc_lim"]
-                    b_max = np.max(np.max(b_map.rate, axis=1), axis=1) > params["pc_lim"]
-                    pc_idx = np.where(((a_max & b_max) == np.True_) & (n_fields[j] == 1) & (n_fields[k] == 1))[0]
-                    # calc map correlation and vector distribution
-                    corr_list = np.zeros(pc_idx.size)
-                    for ii, idx in enumerate(pc_idx):
-                        corr_list[ii] = np.corrcoef(a_map.rate[idx].flatten(), b_map.rate[idx].flatten())[0, 1]
-                        e_sum, l_sum = np.sum(a_map.rate[idx]), np.sum(b_map.rate[idx])
-                        a_y, a_x = np.sum(a_map.rate[idx] * a_map.Y) / e_sum, np.sum(a_map.rate[idx] * a_map.X) / e_sum
-                        b_y, b_x = np.sum(b_map.rate[idx] * b_map.Y) / l_sum, np.sum(b_map.rate[idx] * b_map.X) / l_sum
-                        mov = np.sqrt((b_y - a_y) ** 2 + (b_x - a_x) ** 2)  # [m]
-                        theta = np.arctan2(b_y - a_y, b_x - a_x)  # -pi~pi[rad]
-                        if j == 0 and k == 1:
-                            mov_list.append(mov)
-                            theta_list.append(theta)
-                        if mov <= params["mov_lim"]:
-                            theta_v_dist[i, j, k, np.searchsorted(theta_axis, theta, "right") - 1, np.searchsorted(mov_axis, mov, "right") - 1] += 1
-                    mean_corr[i, j, k, session] = np.mean(corr_list)
+            a_max = np.nanmax(np.nanmax(rate_map_0.rate, axis=1), axis=1) > params["pc_lim"]
+            b_max = np.nanmax(np.nanmax(rate_map_35.rate, axis=1), axis=1) > params["pc_lim"]
+            pc_idx = np.where(((a_max & b_max) == np.True_) & (n_fields_0 == 1) & (n_fields_35 == 1))[0]
+
+            # calc map correlation and vector distribution
+            for ii, idx in enumerate(pc_idx):
+                e_sum, l_sum = np.sum(rate_map_0.rate[idx]), np.sum(rate_map_35.rate[idx])
+                a_y, a_x = np.sum(rate_map_0.rate[idx] * rate_map_0.Y) / e_sum, np.sum(rate_map_0.rate[idx] * rate_map_0.X) / e_sum
+                b_y, b_x = np.sum(rate_map_35.rate[idx] * rate_map_35.Y) / l_sum, np.sum(rate_map_35.rate[idx] * rate_map_35.X) / l_sum
+                mov = np.sqrt((b_y - a_y) ** 2 + (b_x - a_x) ** 2)  # [m]
+                theta = np.arctan2(b_y - a_y, b_x - a_x)  # -pi~pi[rad]
+                theta = np.mod(theta + np.pi * 2, np.pi * 2)  # 0~2pi[rad]
+                mov_list.append(mov)
+
+                if 0.05 < mov <= params["mov_lim"]:
+                    theta_list.append(theta)
+                    theta_v_dist[i, 0, 1, :, np.searchsorted(mov_axis, mov, "right") - 1] += np.histogram(theta, bins=theta_axis)[0]
 
         np.save(out_dir + "mov_sample_da%.1f.npy" % da, np.array(mov_list))
         np.save(out_dir + "theta_sample_da%.1f.npy" % da, np.array(theta_list))
 
     # save data
-    np.save(out_dir + "mean_corr.npy", mean_corr)
     np.save(out_dir + "theta_v_dist.npy", theta_v_dist)
     np.save(out_dir + "field_area.npy", field_area)
     np.save(out_dir + "field_peak.npy", field_peak)

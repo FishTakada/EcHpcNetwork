@@ -364,14 +364,17 @@ def paper_plot_1d(root_dir, params: dict):
 
 def paper_plot_2d(root_dir, params: dict):
 
+    # import pyreadstat
+
     set_text()
 
     analysis_dir = root_dir + "/analysis_2d/"
     fig_dir = root_dir + "/figures/"
+
     da_list = params["da_list"]
     n_da = len(da_list)
 
-    # ---------------------------------------- fig 11 ---------------------------------------- #
+    # ---------------------------------------- fig 8 ---------------------------------------- #
     trial_array = np.arange(1, params["n_train_trial"] + 1, dtype=np.int)
     trial_time = np.zeros((params["n_session"], n_da, params["n_train_trial"]))
     reward_rate = np.zeros((params["n_session"], n_da, params["n_train_trial"]))
@@ -394,6 +397,9 @@ def paper_plot_2d(root_dir, params: dict):
 
     # load data
     for j, da in enumerate(da_list):
+        use_idx = []
+        time_to_reward_trial = np.zeros((params["n_session"], params["n_train_trial"]))
+        successful_rate_trial = np.zeros((params["n_session"], params["n_train_trial"]))
         for session in range(params["n_session"]):
             folder_name = root_dir + 'water_maze_task/da%.2f/session%d' % (da, session)
             trial_end_time = np.load(folder_name + '/trial_end_time.npy') / 1000  # ms to s
@@ -407,6 +413,19 @@ def paper_plot_2d(root_dir, params: dict):
             r_da[j * params["n_session"] + session] = da
             time_to_reward[j * params["n_session"] + session] = trial_end_time[-1]
             successful_rate[j * params["n_session"] + session] = (trial_end_time[-1] < (params["train_simulation_time"] - 1) / 1000).astype(np.float)
+
+            if 19.999 not in trial_end_time:
+                use_idx.append(session)
+            time_to_reward_trial[session] = trial_end_time
+            successful_rate_trial[session] = (trial_end_time < (params["train_simulation_time"] - 1) / 1000).astype(np.float)
+
+        # ttr_by_trial = pd.DataFrame({})
+        # sr_by_trial = pd.DataFrame({})
+        # for trial in range(params["n_train_trial"]):
+        #     ttr_by_trial["Trial#%d" % (trial+1)] = time_to_reward_trial[use_idx, trial]
+        #     sr_by_trial["Trial#%d" % (trial+1)] = successful_rate_trial[use_idx, trial]
+        # pyreadstat.write_sav(ttr_by_trial, analysis_dir + '/ttr_by_trial_da%.2f.sav' % da)
+        # pyreadstat.write_sav(sr_by_trial, analysis_dir + '/sr_by_trial_da%.2f.sav' % da)
 
         for trial in range(params["n_train_trial"]):
             t_dist = stats.t(loc=trial_time[:, j, trial].mean(), scale=np.sqrt(trial_time[:, j, trial].var() /
@@ -427,6 +446,14 @@ def paper_plot_2d(root_dir, params: dict):
     trial_time_suc = np.copy(trial_time)
     trial_time_suc[time_out_idx] = 0
     trial_time_suc = np.sum(trial_time_suc, axis=0) / non_time_out_cnt
+
+    # last_lap_ttr = pd.DataFrame({"R_DA": r_da, "TimeToReward": time_to_reward})
+    # last_lap_ttr = last_lap_ttr[last_lap_ttr["TimeToReward"] != 19.999]
+    # last_lap_sr = pd.DataFrame({"R_DA": r_da, "SuccessfulRate": successful_rate})
+    # last_lap_ttr = last_lap_ttr.sort_values(by="R_DA")
+    # last_lap_sr = last_lap_sr.sort_values(by="R_DA")
+    # pyreadstat.write_sav(last_lap_ttr, analysis_dir + '/last_lap_ttr.sav')
+    # pyreadstat.write_sav(last_lap_sr, analysis_dir + '/last_lap_sr.sav')
 
     trial_grid = np.zeros((params["n_session"], params["n_train_trial"]), dtype=np.int)
     for trial in range(1, params["n_train_trial"]):
@@ -450,11 +477,10 @@ def paper_plot_2d(root_dir, params: dict):
 
     ax1 = fig.add_subplot(2, 3, 2)
     for j, da in enumerate(da_list):
-        ax1.plot(trial_array, trial_time_suc[j], "-", color=cm.jet(j / (n_da-1)), label="%.1f" % da)
-        ax1.fill_between(trial_array, trial_time_up95_suc[j], trial_time_bot95_suc[j], facecolor=cm.jet(j / (n_da-1)), alpha=0.3)
+        ax1.plot(trial_array, trial_time_suc[j], "-", label="%.1f" % da)
+        ax1.fill_between(trial_array, trial_time_up95_suc[j], trial_time_bot95_suc[j], alpha=0.3)
     ax1.set_ylabel('Time to reward [s]')
     ax1.set_xlabel('Trial#')
-    ax1.set_ylim(5, 15)
     ax1.set_xlim(1, params["n_train_trial"])
     ax1.spines['right'].set_visible(False)
     ax1.spines['top'].set_visible(False)
@@ -463,15 +489,18 @@ def paper_plot_2d(root_dir, params: dict):
     ax1.locator_params(axis='y', nbins=6)
     ax1.set_xticks([1, 12, 24, 36])
     ax1.set_yticks([5, 10, 15])
+    ax1.set_xlim(1, 42)
 
     # reward rate plot
     ax2 = fig.add_subplot(2, 3, 3)
     for j, da in enumerate(da_list):
-        ax2.plot(trial_array, reward_rate[j] * 100, "-", color=cm.jet(j / (n_da-1)), label="%.1f" % da)
-        ax2.fill_between(trial_array, reward_rate_up95[j] * 100, reward_rate_bot95[j] * 100, facecolor=cm.jet(j / (n_da-1)), alpha=0.3)
+        ax2.plot(trial_array, reward_rate[j] * 100, "-", label="%.1f" % da)
+        ax2.fill_between(trial_array, reward_rate_up95[j] * 100, reward_rate_bot95[j] * 100, alpha=0.3)
+        # ax2.plot(trial_array, reward_rate[j] * 100, "-", color=cm.jet(j / (n_da-1)), label="%.1f" % da)
+        # ax2.fill_between(trial_array, reward_rate_up95[j] * 100, reward_rate_bot95[j] * 100, facecolor=cm.jet(j / (n_da-1)), alpha=0.3)
     ax2.set_ylabel('Reward acquisition rate [%]')
     ax2.set_xlabel('Trial#')
-    ax2.set_ylim(0, 100)
+    # ax2.set_ylim(0, 100)
     ax2.set_xlim(1, params["n_train_trial"])
     ax2.spines['right'].set_visible(False)
     ax2.spines['top'].set_visible(False)
@@ -479,87 +508,89 @@ def paper_plot_2d(root_dir, params: dict):
     ax2.xaxis.set_ticks_position('bottom')
     ax2.locator_params(axis='y', nbins=6)
     ax2.set_xticks([1, 12, 24, 36])
+    ax2.set_xlim(1, 42)
+
+    ax3 = fig.add_subplot(2, 3, 4)
+    ratio = 0.75
+    ini_pos = [[0.75, 0.75], [0.75, 0.90], [0.75, 1.05], [0.75, 1.2], [0.75, 1.3], [0.9, 0.75], [1.05, 0.75], [1.2, 0.75], [1.3, 0.75]]
+    ax3.plot([0.0, 1.5, 1.5, 0.0, 0.0], [0.0, 0.0, 1.5, 1.5, 0.0], "-k")
+    for pos in ini_pos:
+        ax3.annotate('', xy=[(1.3-pos[0])*ratio + pos[0], (1.3-pos[1])*ratio + pos[1]], xytext=pos, arrowprops=dict(arrowstyle='->',
+                                                                                                                    connectionstyle='arc3',
+                                facecolor='gray', edgecolor='gray'))
+    ax3.spines['right'].set_visible(False)
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['bottom'].set_visible(False)
+    ax3.spines['left'].set_visible(False)
+    ax3.set_xticks([])
+    ax3.set_yticks([])
+    ax3.axis("equal")
 
     # axis
     theta_axis = np.linspace(0, 2 * np.pi, params["n_part"])
     theta_v_dist = np.load(analysis_dir + "theta_v_dist.npy")
 
-    def plot_polar(obj_fig: pyplot.Figure, ax_idx: tuple, angles, values, norm=False):
-        angles[-1] = angles[0]
-        values[-1] = values[0]
+    def plot_polar(obj_fig: pyplot.Figure, ax_idx: tuple, angles: np.ndarray, values, color, norm=False):
+        angles += (angles[1] - angles[0]) * 0.5
+        angles = np.append(angles, angles[0])
+        values = np.append(values, values[0])
         if norm is True:
             values /= np.sum(values)
         ax_polar = obj_fig.add_subplot(*ax_idx, polar=True)
-        ax_polar.plot(angles, values, '-')
-        ax_polar.fill(angles, values, alpha=0.5)
+        ax_polar.plot(angles, values, '-', color=color)
+        ax_polar.fill(angles, values, alpha=0.5, color=color)
         ax_polar.tick_params(labelleft=False, left=False)
         return ax_polar
 
-    mov_lim = 0.2
-    mov_0 = np.load(root_dir + "/analysis_2d/mov_sample_da0.0.npy")
-    mov_1 = np.load(root_dir + "/analysis_2d/mov_sample_da0.5.npy")
-    theta_0 = np.load(root_dir + "/analysis_2d/theta_sample_da0.0.npy")
-    theta_1 = np.load(root_dir + "/analysis_2d/theta_sample_da0.5.npy")
-    mov_0_idx = mov_0 <= mov_lim
-    mov_1_idx = mov_1 <= mov_lim
-    mov_0 = mov_0[mov_0_idx]
-    mov_1 = mov_1[mov_1_idx]
-    theta_0 = np.mod(theta_0 + np.pi * 2, np.pi * 2)
-    theta_1 = np.mod(theta_1 + np.pi * 2, np.pi * 2)
-    theta_0 = theta_0[mov_0_idx]
-    theta_1 = theta_1[mov_1_idx]
+    mov_0 = np.load(analysis_dir + "mov_sample_da0.0.npy")
+    mov_1 = np.load(analysis_dir + "mov_sample_da0.5.npy")
+    mov_2 = np.load(analysis_dir + "mov_sample_da1.0.npy")
 
-    ax1 = pyplot.subplot(2, 3, 4)
-    ax1.hist(mov_0, alpha=0.5, bins=100, label="$R_{DA}$:0.0", density=True)
-    ax1.hist(mov_1, alpha=0.5, bins=100, label="$R_{DA}$:0.5", density=True)
+    ax1 = pyplot.subplot(2, 3, 5)
+    ax1.hist(mov_0, alpha=0.5, bins=100, label="$R_{DA}$:0.0", density=True, stacked=True)
+    ax1.hist(mov_1, alpha=0.5, bins=100, label="$R_{DA}$:0.5", density=True, stacked=True)
+    ax1.hist(mov_2, alpha=0.5, bins=100, label="$R_{DA}$:1.0", density=True, stacked=True)
     ax1.legend(framealpha=0.0, fontsize=6)
+    ax1.set_xlim(0.0, 0.2)
     ax1.set_xlabel("Distance [m]")
     ax1.set_ylabel("Normalized frequency")
 
-    ax2 = pyplot.subplot(2, 3, 5)
-    ax2.hist(theta_0, alpha=0.5, bins=100, label="$R_{DA}$:0.0", density=True)
-    ax2.hist(theta_1, alpha=0.5, bins=100, label="$R_{DA}$:0.5", density=True)
-    ax2.legend(framealpha=0.0, fontsize=6)
-    ax2.set_xlabel("Direction [rad]")
-    ax2.set_ylabel("Normalized frequency")
-    ax2.set_ylim(0.1, 0.27)
-    ax2.set_xticks([0, np.pi/2, np.pi, 3/2*np.pi, 2*np.pi-theta_axis[1]])
-    ax2.set_xticklabels(["0", r"$\frac{\pi}{2}$", r"$\pi$", r"$\frac{3}{2}\pi$", r"$2\pi$"])
-
-    # polar plot and 2d histogram
-    theta_v_hist = theta_v_dist[0, 0, 1].transpose()[:, :-1]
-    theta_v_hist = np.roll(theta_v_hist, -int(theta_axis.size / 2), axis=1)
-    plot_polar(fig, (2, 3, 6), angles=np.copy(theta_axis[:-1]), values=np.sum(theta_v_hist, axis=0), norm=True)
-    theta_v_hist = theta_v_dist[1, 0, 1].transpose()[:, :-1]
-    theta_v_hist = np.roll(theta_v_hist, -int(theta_axis.size / 2), axis=1)
-    ax = plot_polar(fig, (2, 3, 6), angles=np.copy(theta_axis[:-1]), values=np.sum(theta_v_hist, axis=0), norm=True)
+    # polar plot
+    theta_v_hist = theta_v_dist[1, 0, 1].transpose()[:, :]
+    plot_polar(fig, (2, 3, 6), angles=np.copy(theta_axis[:-1]), values=np.sum(theta_v_hist, axis=0), color="tab:orange", norm=True) # RDA0.5
+    theta_v_hist = theta_v_dist[2, 0, 1].transpose()[:, :]
+    ax = plot_polar(fig, (2, 3, 6), angles=np.copy(theta_axis[:-1]), values=np.sum(theta_v_hist, axis=0), color="tab:green", norm=True)    # RDA1.0
     ax.set_xticklabels(['0', '', r"$\frac{\pi}{2}$", '', r"$\pi$", '', r"$\frac{3}{2}\pi$", ''])
-    ax.legend(labels=["0.0", "0.5"], title="$R_{DA}$", bbox_to_anchor=(1.005, 1.2), loc="upper left", framealpha=0.0)
+    ax.legend(labels=["0.5", "1.0"], title="$R_{DA}$", bbox_to_anchor=(1.005, 1.2), loc="upper left", framealpha=0.0)
     pyplot.tight_layout()
     pyplot.savefig(fig_dir + "/figure7_field_shift_2d.tiff", transparent=True, dpi=300)
     pyplot.savefig(fig_dir + "/figure7_field_shift_2d.png", transparent=True, dpi=300)
     pyplot.close(fig)
 
     # ---------------------------------------- figure 8 ---------------------------------------- #
+    set_text()
     ach = 2.5
     fig = pyplot.figure(figsize=(cm2inch(15.0), cm2inch(15.0)))
-    fig.subplots_adjust(wspace=0.4, hspace=0.25, left=0.1, right=0.95, bottom=0.1, top=0.95)
+    fig.subplots_adjust(wspace=0.4, hspace=0.25, left=0.1, right=0.9, bottom=0.1, top=0.9)
+    # fig.subplots_adjust(wspace=0.4, hspace=0.25, left=0.1, right=0.95, bottom=0.1, top=0.95)
     ax1 = fig.add_subplot(2, 2, 2)
     replay_freq = np.load(analysis_dir + "f_ach%.1f/replay_freq_2d.npy" % ach)
     y = np.nanmean(replay_freq, axis=1)
     y_err = np.nanstd(replay_freq, axis=1) / np.sqrt(params["n_session"])
     ax1.bar(da_list, y, yerr=y_err, width=0.25, capsize=3, color="grey")
     _, p = ttest_ind(replay_freq[0, :], replay_freq[1, :], equal_var=False)
-    print("p value = %f" % p)
     barplot_annotate_brackets(0, 1, p, da_list, y, yerr=y_err)
+    _, p = ttest_ind(replay_freq[1, :], replay_freq[2, :], equal_var=False)
+    barplot_annotate_brackets(1, 2, p, da_list, y, yerr=y_err)
+    _, p = ttest_ind(replay_freq[0, :], replay_freq[2, :], equal_var=False)
+    barplot_annotate_brackets(0, 2, p, da_list, y, yerr=y_err)
     ax1.set_xlabel("$R_{DA}$")
     ax1.set_ylabel("Replay frequency [1/s]")
     ax1.spines['right'].set_visible(False)
     ax1.spines['top'].set_visible(False)
     ax1.yaxis.set_ticks_position('left')
     ax1.xaxis.set_ticks_position('none')
-    ax1.set_xticks([0.0, 0.5])
-    ax1.set_ylim(0.0, 0.06)
+    ax1.set_xticks([0.0, 0.5, 1.0])
     ax1.locator_params(axis='y', nbins=6)
 
     start_pos = np.load(analysis_dir + "f_ach%.1f/start_pos.npy" % ach)
@@ -587,8 +618,87 @@ def paper_plot_2d(root_dir, params: dict):
     ax3.set_xticks([])
     ax3.set_yticks([])
 
+    pyplot.tight_layout()
     pyplot.savefig(fig_dir + "figure8_replay_stats_2d.eps", transparent=True, dpi=300)
     pyplot.savefig(fig_dir + "figure8_replay_stats_2d.png", transparent=True, dpi=300)
+    pyplot.close()
+
+    # ---------------------------------------- figure 9 ---------------------------------------- #
+    def plot_traj(place_data, obj_fig: pyplot.Figure, ax_idx: tuple):
+
+        place_tot: np.ndarray = np.load(place_data)
+        place_tot_list = []
+
+        last_t = .0
+        for t, x, y in place_tot:
+            if t - last_t > 4.0 and x == 0.75 and y == 0.75:
+                place_tot_list.append(place_tot[int(last_t * 1000)+100:int(t * 1000)-100])
+                last_t = t + 0.001
+        else:
+            place_tot_list.append(place_tot[int(last_t * 1000):])
+
+        # plot trajectory
+        ax_traj = obj_fig.add_subplot(*ax_idx)
+        for trial, place in enumerate(place_tot_list):
+            ax_traj.plot(place[:, 1], place[:, 2], color=pyplot.cm.jet(trial / 10), alpha=0.3, lw=2)
+        pyplot.axis('equal')
+        ax_traj.set_xlabel("X axis[m]")
+        ax_traj.set_ylabel("Y axis[m]")
+        ax_traj.set_xticks([0.0, 0.75, 1.5])
+        ax_traj.set_yticks([0.0, 0.75, 1.5])
+        ax_traj.set_xticklabels(["0.0", "0.75", "1.5"])
+        ax_traj.set_yticklabels(["0.0", "0.75", "1.5"])
+
+    data_dir = root_dir + "/trajectory_modulation"
+    fig = pyplot.figure(figsize=(cm2inch(15.0), cm2inch(15.0)))
+    fig.subplots_adjust(wspace=0.25, hspace=0.25, left=0.1, right=0.9, bottom=0.1, top=0.9)
+    plot_traj(data_dir + "/da0.00/session2/place_total_forced.npy", fig, (2, 2, 1))
+    plot_traj(data_dir + "/da0.00/session2/place_total_free.npy", fig, (2, 2, 2))
+    plot_traj(data_dir + "/da0.50/session2/place_total_free.npy", fig, (2, 2, 3))
+
+    n_da = 2
+    trial_array = np.arange(1, 10 + 1, dtype=np.int)
+    trial_time = np.zeros((100, n_da, 10))
+    trial_time_mean = np.zeros((n_da, 10))
+    trial_time_up95 = np.zeros((n_da, 10))
+    trial_time_bot95 = np.zeros((n_da, 10))
+
+    # load data
+    for j, da in enumerate([0.0, 0.5]):
+        use_idx = []
+        for session in range(params["n_trajectory_session"]):
+            folder_name = data_dir + '/da%.2f/session%d' % (da, session)
+            trial_end_time = np.load(folder_name + '/trial_end_time_free.npy') / 1000  # ms to s
+            trial_time[session, j, :] = trial_end_time
+
+            if 19.999 not in trial_end_time:
+                use_idx.append(session)
+
+        n_data = len(use_idx)
+
+        trial_time_mean[j, :] = np.sum(trial_time[use_idx, j], axis=0) / n_data
+        for trial in range(10):
+            t_dist = stats.t(loc=trial_time[use_idx, j, trial].mean(), scale=np.sqrt(trial_time[use_idx, j, trial].var() /
+                                                                               n_data), df=n_data - 1)
+            trial_time_up95[j, trial], trial_time_bot95[j, trial] = t_dist.interval(alpha=0.95)
+
+    ax1 = fig.add_subplot(2, 2, 4)
+    for j, da in enumerate([0, 0.5]):
+        ax1.plot(trial_array, trial_time_mean[j], "-", label="%.1f" % da)
+        ax1.fill_between(trial_array, trial_time_up95[j], trial_time_bot95[j], alpha=0.3)
+    ax1.set_ylabel('Time to reward [s]')
+    ax1.set_xlabel('Trial#')
+    # ax1.set_ylim(5, 15)
+    ax1.set_xlim(1, 10)
+    ax1.spines['right'].set_visible(False)
+    ax1.spines['top'].set_visible(False)
+    ax1.yaxis.set_ticks_position('left')
+    ax1.xaxis.set_ticks_position('bottom')
+    ax1.locator_params(axis='y', nbins=6)
+
+    pyplot.savefig(fig_dir + "figure9_trajectory_modulation.eps", transparent=True, dpi=300)
+    pyplot.savefig(fig_dir + "figure9_trajectory_modulation.png", transparent=True, dpi=300)
+    pyplot.savefig(fig_dir + "figure9_trajectory_modulation.tiff", transparent=True, dpi=300)
     pyplot.close()
 
 
@@ -617,14 +727,14 @@ def skew_map_plot_1d(root_dir: str, params: dict):
 
     import pickle
     from scipy import ndimage
-    from ec_hpc_net import EcHpc
+    from ec_hpc_net import EcHpcSimple
 
     n_trial = params["n_train_trial"]
     da_list = params["da_list"]
     fig_dir = root_dir + "/figures/"
 
     with open(root_dir + 'linear_track_task/da%.2f/session%d' % (da_list[0], 0) + "/snn_trial%d.pickle" % (n_trial - 1), "rb") as f:
-        snn: EcHpc = pickle.load(f)
+        snn: EcHpcSimple = pickle.load(f)
 
     # output data array
     delta_x = 0.01   # m
@@ -774,6 +884,8 @@ def barplot_annotate_brackets(num1, num2, data, center,
                               height, yerr=None, dh=.05,
                               barh=.05, fs=None, maxasterix=None):
 
+    offset = 0.05
+
     if type(data) is str:
         text = data
     else:
@@ -805,7 +917,14 @@ def barplot_annotate_brackets(num1, num2, data, center,
     dh *= (ax_y1 - ax_y0)
     barh *= (ax_y1 - ax_y0)
 
-    y = max(ly, ry) + dh
+    max_idx = np.argmax(height)
+    if num1 == 0 and num2 == 2:
+        y = height[max_idx] + yerr[max_idx] + dh * 2.5
+    else:
+        y = height[max_idx] + yerr[max_idx] + dh
+
+    lx += offset
+    rx -= offset
 
     barx = [lx, lx, rx, rx]
     bary = [y, y + barh, y + barh, y]

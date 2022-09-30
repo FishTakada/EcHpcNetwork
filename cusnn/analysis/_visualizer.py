@@ -18,7 +18,7 @@ def plot_map2d(obj_fig: Figure, ax_idx: tuple, ratemap: RateMap, ith, colormap=p
     if annot is True:
         ax.annotate('#%d' % ith, xy=(0.05, ratemap.Y[-1, 0] - 0.2), color='w', size=15)
         hz_str = '%.1fHz' % np.nanmax(ratemap.rate[ith])
-        ax.annotate(hz_str, xy=(ratemap.X[0, -1] - len(hz_str) * 0.1, 0.05), color='w', size=15)
+        ax.annotate(hz_str, xy=(ratemap.X[0, -1] - len(hz_str) * 0.1, 0.05), color='k', size=15)
     ax.tick_params(labelbottom=False, bottom=False)
     ax.tick_params(labelleft=False, left=False)
     ax.set_xticklabels([])

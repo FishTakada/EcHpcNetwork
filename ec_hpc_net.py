@@ -5,11 +5,12 @@ from cusnn.value_obj import StateVariable, LocalVariable, GlobalVariable
 pi2 = np.pi * 2
 
 
-class EcHpc(cs.Module):
+class EcHpcSimple(cs.Module):
     def __init__(self, params: dict):
         super().__init__()
 
         # parameters and definitions
+        self.params = params
         self.n_dir = 4
         self.n_action = 16
         self.nx, self.ny = 30, 26
@@ -83,17 +84,23 @@ class EcHpc(cs.Module):
         self._add_connection(self.grid_2, self.pyramidal, self.conn.conn_number2all(self.grid_2, self.pyramidal, syn_num=1, w=0.16), syn, None)
         self._add_connection(self.pyramidal, self.pyramidal,
                              self.conn.conn_all2all_uniform(self.pyramidal, self.pyramidal, prob=0.16, w_min=0.0, w_max=0.001, no_self=True), syn,
-                             DaStdpBiased(a_plus=0.12, a_minus=-0.3, tau_trace=5000., stdp_max=1.0, tau_plus=50.0, tau_minus=50.0,
+                             DaStdpBiasedSwitch(a_plus=0.12, a_minus=-0.3, tau_trace=5000., stdp_max=1.0, tau_plus=50.0, tau_minus=50.0,
                                           tau_da=200.0, bias=0.0))
         self._add_connection(self.pyramidal, self.basket, self.conn.conn_all2all(self.pyramidal, self.basket, prob=0.05, w=0.375), syn, None)
         self._add_connection(self.basket, self.pyramidal, self.conn.conn_all2all(self.basket, self.pyramidal, prob=0.05, w=-0.16), syn, None)
         self._add_connection(self.basket, self.basket, self.conn.conn_all2all(self.basket, self.basket, prob=0.01, w=-0.4, no_self=True), syn, None)
 
         # Action selection network
-        self._add_connection(self.pyramidal, self.action_neuron,
-                             self.conn.conn_all2all_uniform(self.pyramidal, self.action_neuron, prob=1., w_min=0.0, w_max=0.05), syn,
-                             DaStdpBiased(a_plus=0.03, a_minus=0.03, tau_trace=1000., stdp_max=0.05, tau_plus=50.0, tau_minus=50.0,
-                                          tau_da=200.0, bias=0.00015))
+        if self.params.get("forced_run", False):
+            self._add_connection(self.pyramidal, self.action_neuron,
+                                 self.conn.conn_all2all_uniform(self.pyramidal, self.action_neuron, prob=1., w_min=0.0, w_max=0.000001), syn,
+                                 DaStdpBiasedSwitch(a_plus=0.03, a_minus=0.03, tau_trace=1000., stdp_max=0.05, tau_plus=50.0, tau_minus=50.0,
+                                              tau_da=200.0, bias=0.00015))
+        else:
+            self._add_connection(self.pyramidal, self.action_neuron,
+                                 self.conn.conn_all2all_uniform(self.pyramidal, self.action_neuron, prob=1., w_min=0.0, w_max=0.05), syn,
+                                 DaStdpBiasedSwitch(a_plus=0.03, a_minus=0.03, tau_trace=1000., stdp_max=0.05, tau_plus=50.0, tau_minus=50.0,
+                                              tau_da=200.0, bias=0.00015))
         self._add_connection(self.action_neuron, self.action_neuron, self.conn_action2action(w=1.), syn, None)
         self._add_connection(self.action_neuron, self.action_inhibi, np.eye(self.n_action, dtype=np.float32) * 0.5, syn, None)
         self._add_connection(self.action_inhibi, self.action_neuron, self.conn_inhibi2action(w=-1.5), syn, None)
@@ -168,7 +175,7 @@ class EcHpc(cs.Module):
         return wij
 
 
-class DaStdpBiased(cs.STDP):
+class DaStdpBiasedSwitch(cs.STDP):
     def __init__(self, **params):
         super().__init__(**params)
         self.a_plus = params.get("a_plus", 1.0)
